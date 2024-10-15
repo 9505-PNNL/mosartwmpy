@@ -30,8 +30,10 @@ from mosartwmpy.state.state import State
 from mosartwmpy.update.update import update
 from mosartwmpy.utilities.pretty_timer import pretty_timer
 from mosartwmpy.utilities.inherit_docs import inherit_docs
-
-
+import pandas as pd
+import os
+import pyarrow
+import pyarrow.parquet as pq
 @inherit_docs
 class Model(Bmi):
     """The mosartwmpy basic model interface.
@@ -197,7 +199,40 @@ class Model(Bmi):
                         # load the demand from file
                         load_demand(self.name, self.state, self.config, self.current_time, self.farmerABM, self.mask)
                 # update reservoir release targets (logic for when to do this is inside the method)
+                
                 reservoir_release(self.state, self.grid, self.config, self.parameters, self.current_time, self.mask)
+                
+#######################################################################################################################################
+# may be best place to get LSTM_reservoir_release(self.state, self.grid, self.config, self.parameters, self.current_time, self.mask)
+
+                reservoir_idp = pd.DataFrame(self.grid.reservoir_id)
+                reservoir_releasep = pd.DataFrame(self.state.reservoir_release)
+                reservoir_storagep = pd.DataFrame(self.state.reservoir_storage)
+                channel_outflow_downstreamp = pd.DataFrame(-1*self.state.channel_outflow_downstream)
+                #month_curr = pd.DataFrame(self.current_time.month)
+                #month_curr=pd.to_datetime(month_curr)
+                #month=month_curr.dt.month
+                #monthval=for_lstm['month_val'].dt.month
+                for_lstm=pd.DataFrame({'res_id':self.grid.reservoir_id,                
+                                   'month_curr': self.current_time.month,
+                                   'inflow_cur':self.state.channel_outflow_downstream,
+                                   'storage_cur':self.state.reservoir_storage,
+                                   'outlow_cur':self.state.reservoir_release})
+                for_lstm = for_lstm.dropna()                
+                #for_lstm.to_csv("for_lstm.csv",mode='a',index=False,header=True)
+                parquet_path = "for_lstm.parquet"
+                
+                if not os.path.exists(parquet_path):
+                    for_lstm.to_parquet("/people/wolk446/for_lstm.parquet",engine='pyarrow')
+                else:
+                    existing_df = pd.read_parquet(parquet_path)
+                    combined_df=pd.concat([existing_df,for_lstm],ignore_index=True)
+                    combined_df.to_parquet(parquet_path,engine='pyarrow')
+                    #for_lstm.to_parquet("for_lstm.parquet",engine='pyarrow')
+                #########################check if the look back requirment =45 is met
+                ################
+####################################################################################################################################### 
+#######################################################################################################################################
                 # zero supply and demand
                 self.state.grid_cell_supply[:] = 0
                 self.state.grid_cell_unmet_demand[:] = 0
@@ -206,6 +241,8 @@ class Model(Bmi):
             update(self.state, self.grid, self.parameters, self.config, self.current_time)
             # advance timestep
             self.current_time += timedelta(seconds=self.config.get('simulation.timestep'))
+            
+            
         except Exception as e:
             logging.exception('Failed to complete timestep; see below for stacktrace.')
             raise e
@@ -226,8 +263,9 @@ class Model(Bmi):
             self.state.hillslope_surface_runoff = self.state.hillslope_surface_runoff * 1000.0 / self.grid.land_fraction / self.grid.area
             self.state.hillslope_subsurface_runoff = self.state.hillslope_subsurface_runoff * 1000.0 / self.grid.land_fraction / self.grid.area
             self.state.hillslope_wetland_runoff = self.state.hillslope_wetland_runoff * 1000.0 / self.grid.land_fraction / self.grid.area
-
+    
     def update_until(self, time: float = None) -> None:
+        
         # if time is None, set time to end time
         if time is None:
             time = self.get_end_time()
@@ -247,10 +285,20 @@ class Model(Bmi):
                 # update progress bar
                 current_datetime = datetime.fromtimestamp(self.get_current_time())
                 progress.update(1, current_datetime.isoformat(" "))
+                ####################################################################################################################################### 
+                # collect results here
+                 
+                #######################################################################################################################################
                 # advance one timestep
                 self.update()
+                ####################################################################################################################################### 
+                # collect next time step results here and append it to previous results
+ 
+                #######################################################################################################################################
         logging.info(f'Simulation completed in {pretty_timer(timer() - t)}.')
-
+        # get reservoir inflow, storgae and release and append everytime step
+        result_check = self.current_time.timestamp()
+        
     def finalize(self) -> None:
         # simulation is over so free memory, write data, etc
         for handler in logging.getLogger().handlers:

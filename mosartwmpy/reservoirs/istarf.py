@@ -9,7 +9,13 @@ from mosartwmpy.config.parameters import Parameters
 from mosartwmpy.state.state import State
 from mosartwmpy.grid.grid import Grid
 from mosartwmpy.utilities.epiweek import get_epiweek_from_datetime
-
+################################################################
+#import tensorflow as tf
+#from tensorflow.keras.models import load_model
+#from sklearn.preprocessing import MinMaxScaler
+#export HDF5_USE_FILE_LOCKING=FALSE
+#from keras.models import load_model
+##################################################################
 
 def istarf_release(state: State, grid: Grid, current_time: datetime):
     # estimate reservoir release using ISTARF which is based on harmonic functions
@@ -61,7 +67,16 @@ def istarf_release(state: State, grid: Grid, current_time: datetime):
         daily_release / (24.0 * 60.0 * 60.0),
         state.reservoir_release
     )
-
+    lstm_release = np.load("/people/wolk446/release.npy.npz")
+    release=lstm_release['release']
+    resID=lstm_release['resID']
+    mapping=dict(zip(resID,release))
+    for value in resID:
+        try:
+            state.reservoir_release[grid.reservoir_id==value]=mapping[value]
+            print(mapping[value])
+        except KeyError:
+             pass
 
 @nb.jit(
     "void("
