@@ -219,16 +219,11 @@ class Model(Bmi):
                                    'storage_cur':self.state.reservoir_storage,
                                    'outlow_cur':self.state.reservoir_release})
                 for_lstm = for_lstm.dropna()                
-                #for_lstm.to_csv("for_lstm.csv",mode='a',index=False,header=True)
-                parquet_path = "for_lstm.parquet"
-                
-                if not os.path.exists(parquet_path):
-                    for_lstm.to_parquet("/people/wolk446/for_lstm.parquet",engine='pyarrow')
-                else:
-                    existing_df = pd.read_parquet(parquet_path)
-                    combined_df=pd.concat([existing_df,for_lstm],ignore_index=True)
-                    combined_df.to_parquet(parquet_path,engine='pyarrow')
-                    #for_lstm.to_parquet("for_lstm.parquet",engine='pyarrow')
+                parquet_path = self.config.get('parquet_path')
+                existing_df = pd.read_parquet(parquet_path)
+                combined_df=pd.concat([existing_df,for_lstm],ignore_index=True)
+                combined_df.to_parquet(parquet_path,engine='pyarrow')
+
                 #########################check if the look back requirment =45 is met
                 ################
 ####################################################################################################################################### 
